@@ -702,6 +702,7 @@ def get_image_path(args):
 
 
 def prepare_controlnet_cond(image_path, height, width):
+    
     image = Image.open(image_path).convert("RGB")
     image = image.resize((height, width), resample=Image.LANCZOS)
     image = np.array(image).transpose(2, 0, 1) / 255.0
