@@ -14,19 +14,21 @@
 2. **Установка зависимостей**:
 
     ```bash
-    pip install torch diffusers transformers Pillow numpy nuitka
+    pip install torch --index-url https://download. pytorch.org/whl/cpu
+    ```
+
+    ```bash
+    pip install diffusers transformers Pillow numpy pyinstaller
     ```
 
 3. **Подготовка модели**:
     Поместите файл модели `model.pth` в ту же папку, где находится `main.py`.
 
-4. **Создание папки для изображений**:
-    
-    ```bash
-    mkdir images
-    ```
+4. **Cоздайте папку images**:
+
 
 ## Запуск скрипта
+
 
 ```bash
 python main.py
@@ -34,16 +36,17 @@ python main.py
 
 ## Компиляция в исполняемый файл
 
-Для создания автономного исполняемого файла можно использовать **Nuitka**. 
+Для создания автономного исполняемого файла можно использовать **pyinstaller**. 
 
 ### Компиляция
 
-1. **Убедитесь, что `Nuitka` установлена**:
+1. **Убедитесь, что `pyinstaller` установлен**:
     ```bash
-    pip install nuitka
+    pip install pyinstaller
     ```
 
 2. **Выполните команду для компиляции**:
+
     ```bash
-    nuitka --standalone --onefile --lto=no --follow-imports main.py
+    pyinstaller --onefile --hidden-import=transformers --hidden-import=torch --hidden-import=diffusers --hidden-import=safetensors main.py
     ```

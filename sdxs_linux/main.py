@@ -6,6 +6,8 @@ import re
 from PIL import Image
 import gc
 import numpy
+import requests
+
 
 
 model_path = "./model.pth"

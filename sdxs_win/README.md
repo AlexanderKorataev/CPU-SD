@@ -1,7 +1,3 @@
-Для Windows потребуется внести небольшие изменения, так как команды для создания виртуального окружения, активации его и некоторые другие процессы отличаются. Вот адаптированный `README.md` для запуска и компиляции на Windows:
-
----
-
 # Генерация изображений при помощи SDXS на Windows
 
 Используемая модель [IDKiro/sdxs-512-0.9](https://huggingface.co/IDKiro/sdxs-512-0.9)
@@ -18,10 +14,12 @@
 
 2. **Установка зависимостей**:
 
-    После активации виртуального окружения установите необходимые библиотеки:
+    ```bash
+    pip install torch --index-url https://download. pytorch.org/whl/cpu
+    ```
 
     ```bash
-    pip install torch diffusers transformers Pillow numpy nuitka
+    pip install diffusers transformers Pillow numpy pyinstaller
     ```
 
 3. **Подготовка модели**:
@@ -39,18 +37,17 @@ python main.py
 
 ## Компиляция в исполняемый файл
 
-Для создания автономного исполняемого файла можно использовать **Nuitka**. 
+Для создания автономного исполняемого файла можно использовать **pyinstaller**. 
 
 ### Компиляция
 
-1. **Убедитесь, что `Nuitka` установлена**:
+1. **Убедитесь, что `pyinstaller` установлен**:
     ```bash
-    pip install nuitka
+    pip install pyinstaller
     ```
 
 2. **Выполните команду для компиляции**:
-    Выполните команду Nuitka, чтобы создать исполняемый файл:
 
     ```bash
-    nuitka --standalone --onefile --lto=no --follow-imports main.py
+    pyinstaller --onefile --hidden-import=transformers --hidden-import=torch --hidden-import=diffusers --hidden-import=safetensors main.py
     ```

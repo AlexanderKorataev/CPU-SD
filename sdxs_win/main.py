@@ -6,11 +6,12 @@ import re
 from PIL import Image
 import gc
 import numpy
+import requests
 
 
 model_path = "./model.pth"
 pipe = torch.load(model_path, weights_only=False)
-device = "mps"
+device = "cpu"
 pipe.to(device)
 
 def get_image_path(prompt):

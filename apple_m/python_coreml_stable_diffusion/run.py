@@ -734,9 +734,6 @@ def main(args):
         force_zeros_for_empty_prompt = pytorch_pipe.config['force_zeros_for_empty_prompt']
 
 
-    print(GLOBAL_MODELS)
-
-
     coreml_pipe = get_coreml_pipe(
         pytorch_pipe=pytorch_pipe,
         mlpackages_dir=args.i,

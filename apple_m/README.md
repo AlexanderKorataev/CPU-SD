@@ -1,6 +1,6 @@
 # Генерация изображений при помощи SDXS на Mac с процессорами M
 
-Используемая модель https://huggingface.co/IDKiro/sdxs-512-0.9
+Используемая модель https://huggingface.co/apple/coreml-stable-diffusion-2-1-base-palettized
 
 
 ## Запуск
@@ -14,36 +14,22 @@
 2. **Установка зависимостей**:
 
     ```bash
-    pip install torch diffusers transformers Pillow numpy nuitka
+    pip install torch --index-url https://download. pytorch.org/whl/cpu
+    ```
+
+    ```bash
+    pip install diffusers transformers Pillow numpy pyinstaller
     ```
 
 3. **Подготовка модели**:
     Поместите файл модели `model.pth` в ту же папку, где находится `main.py`.
 
-4. **Создание папки для изображений**:
-    
-    ```bash
-    mkdir images
-    ```
+4. **Cоздайте папку images**:
+
 
 ## Запуск скрипта
+
 
 ```bash
 python main.py
 ```
-
-## Компиляция в исполняемый файл
-
-Для создания автономного исполняемого файла можно использовать **Nuitka**. 
-
-### Компиляция
-
-1. **Убедитесь, что `Nuitka` установлена**:
-    ```bash
-    pip install nuitka
-    ```
-
-2. **Выполните команду для компиляции**:
-    ```bash
-    nuitka --standalone --onefile --lto=no --follow-imports main.py
-    ```
