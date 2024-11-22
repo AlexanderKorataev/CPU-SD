@@ -2,14 +2,21 @@
 
 Используемая модель [IDKiro/sdxs-512-0.9](https://huggingface.co/IDKiro/sdxs-512-0.9)
 
+## Установите Python
+
+По этой ссылке выберите версию Python, которая вас интересует: https://www.python.org/downloads/release/python-3126/
+
+например Windows installer (64-bit)
+
 ## Запуск
 
-1. **Создайте виртуальное окружение и активируйте его**:
+1. **Создайте виртуальное окружение и активируйте его, а также обновите pip**:
     Откройте командную строку (или PowerShell) в директории проекта и выполните:
 
     ```bash
-    python -m venv venv
+    python3.12 -m venv venv
     .\venv\Scripts\activate
+    pip install -U pip
     ```
 
 2. **Установка зависимостей**:
@@ -22,14 +29,20 @@
     pip install diffusers transformers Pillow numpy
     ```
 
-3. **Подготовка модели**:
-    Поместите файл модели `model.pth` в ту же папку, где находится `main.py`.
+3. **Сохранение модели**
 
-4. **Cоздайте папку images**:
+    Запустите save_model.py
 
+    ```bash
+    python save_model.py
+    ```
+
+4. **Подготовка модели**:
+    Убедитесь, что файл модели `model.pth` находится в той же папке, где и `main.py`.
+
+5. **Cоздайте папку images**:
 
 ## Запуск скрипта
-
 
 ```bash
 python main.py
@@ -37,11 +50,12 @@ python main.py
 
 ## Компиляция в исполняемый файл
 
-Для создания автономного исполняемого файла можно использовать **pyinstaller**. 
+Для создания автономного исполняемого файла можно использовать **pyinstaller**.
 
 ### Компиляция
 
 1. **Убедитесь, что `pyinstaller` установлен**:
+
     ```bash
     pip install pyinstaller
     ```

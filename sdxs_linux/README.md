@@ -2,13 +2,27 @@
 
 Используемая модель https://huggingface.co/IDKiro/sdxs-512-0.9
 
+## Установите Python
+
+```bash
+sudo apt update
+sudo apt upgrade
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+sudo apt update
+sudo apt install python3.12 -y
+sudo apt install python3.12-full
+```
+
+*установка через пакетный менеджер apt (Подходит для ubuntu, debian). Для других дистрибутивов используйте соответсвенно их пакетный манеджер
 
 ## Запуск
 
-1. **Создайте виртуальное окружение и активируйте его**:
+1. **Создайте виртуальное окружение и активируйте его, а также обновите pip**:
+
     ```bash
-    python3 -m venv venv
+    python3.12 -m venv venv
     source venv/bin/activate
+    pip install -U pip
     ```
 
 2. **Установка зависимостей**:
@@ -21,14 +35,20 @@
     pip install diffusers transformers Pillow numpy
     ```
 
-3. **Подготовка модели**:
-    Поместите файл модели `model.pth` в ту же папку, где находится `main.py`.
+3. **Сохранение модели**
 
-4. **Cоздайте папку images**:
+    Запустите save_model.py
 
+    ```bash
+    python save_model.py
+    ```
+
+4. **Подготовка модели**:
+    Убедитесь, что файл модели `model.pth` находится в той же папке, где и `main.py`.
+
+5. **Cоздайте папку images**:
 
 ## Запуск скрипта
-
 
 ```bash
 python main.py
