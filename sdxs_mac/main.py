@@ -15,6 +15,8 @@ pipe = torch.load(model_path, weights_only=False)
 device = "mps"
 pipe.to(device)
 
+print(pipe)
+
 def get_image_path(prompt):
     base_name = prompt.replace(" ", "_")
     pattern = re.compile(rf"{re.escape(base_name)}_(\d{{5}})\.png")

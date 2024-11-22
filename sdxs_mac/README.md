@@ -14,11 +14,11 @@
 2. **Установка зависимостей**:
 
     ```bash
-    pip install torch --index-url https://download. pytorch.org/whl/cpu
+    pip install torch --index-url https://download.pytorch.org/whl/cpu
     ```
 
     ```bash
-    pip install diffusers transformers Pillow numpy pyinstaller
+    pip install diffusers transformers Pillow numpy
     ```
 
 3. **Подготовка модели**:
@@ -48,5 +48,8 @@ python main.py
 2. **Выполните команду для компиляции**:
 
     ```bash
-    pyinstaller --onefile --hidden-import=transformers --hidden-import=torch --hidden-import=diffusers --hidden-import=safetensors main.py
+    pyinstaller --hidden-import=torch --hidden-import=diffusers --hidden-import=transformers --hidden-import=huggingface_hub --hidden-import=tokenizers --hidden-import=networkx --hidden-import=safetensors --hidden-import=regex --hidden-import=numpy --hidden-import=numpy.core.multiarray --hidden-import=numpy.core._dtype --hidden-import=requests --onefile
     ```
+
+    --onefile для того, чтобы сборка была в один файл
+    --hidden-import - зависимости
