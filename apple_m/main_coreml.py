@@ -1,22 +1,57 @@
 import os
-import shutil
 import sys
-import signal
-import time
-import platform
 import argparse
+import signal
+import warnings
+import logging
 
+
+def suppress_stderr():
+    sys.stderr = open(os.devnull, 'w')
+
+def restore_stderr():
+    sys.stderr = sys.__stderr__
+
+suppress_stderr()
 from python_coreml_stable_diffusion.run import main
-
 from python_coreml_stable_diffusion.coreml_model import (
-    CoreMLModel,
-    _load_mlpackage,
-    _load_mlpackage_controlnet,
     get_available_compute_units,
 )
+restore_stderr()
+
+
+def setup_logging():
+    logging.basicConfig(level=logging.ERROR)
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("diffusers").setLevel(logging.ERROR)
+    logging.getLogger("coremltools").setLevel(logging.ERROR)
+
+
+def suppress_warnings():
+    warnings.filterwarnings("ignore")
+
+
+def suppress_stdout_stderr():
+    sys.stdout = open(os.devnull, "w")
+    sys.stderr = open(os.devnull, "w")
+
+
+def restore_stdout_stderr():
+    sys.stdout = sys.__stdout__
+    sys.stderr = sys.__stderr__
+
+
+def handle_exit(signum, frame):
+    sys.exit(0)
 
 
 if __name__ == "__main__":
+    setup_logging()
+    suppress_warnings()
+
+    signal.signal(signal.SIGINT, handle_exit) 
+    signal.signal(signal.SIGTERM, handle_exit) 
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -83,9 +118,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     while True:
-        prompt = input("Введите промпт для генерации изображения ('Ctrl + C' для выхода): ")
+        try:
+           
+            prompt = input()
+            if not prompt:
+                exit()
 
-        args.prompt = prompt
-        
-        main(args)
-        
+            args.prompt = prompt
+
+            suppress_stdout_stderr()
+            out_path = main(args)
+            restore_stdout_stderr()
+
+            print(out_path)
+
+        except EOFError:
+            handle_exit(None, None)
+        except Exception as e:
+            restore_stdout_stderr()

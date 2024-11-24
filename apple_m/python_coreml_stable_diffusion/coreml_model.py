@@ -5,12 +5,7 @@
 
 import coremltools as ct
 
-import logging
 import json
-
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 import numpy as np
 
@@ -38,8 +33,6 @@ class CoreMLModel:
     """
 
     def __init__(self, model_path, compute_unit, sources='packages', optimization_hints=None):
-
-        logger.info(f"Loading {model_path}")
 
         start = time.time()
         if sources == 'packages':
@@ -86,13 +79,7 @@ class CoreMLModel:
             raise ValueError(f'Expected `packages` or `compiled` for sources, received {sources}')
 
         load_time = time.time() - start
-        logger.info(f"Done. Took {load_time:.1f} seconds.")
 
-        if load_time > LOAD_TIME_INFO_MSG_TRIGGER:
-            logger.info(
-                "Loading a CoreML model through coremltools triggers compilation every time. "
-                "The Swift package we provide uses precompiled Core ML models (.mlmodelc) to avoid compile-on-load."
-            )
 
     def _verify_inputs(self, **kwargs):
         for k, v in kwargs.items():
@@ -162,7 +149,6 @@ def _load_mlpackage(submodule_name,
 
     # Пропускаем загрузку safety_checker, так как он не используется
     if submodule_name == "safety_checker":
-        logger.warning("Skipping safety_checker as it is not used.")
         return None
 
     # if sources not provided, attempt to infer `packages` or `compiled` from the
@@ -171,7 +157,6 @@ def _load_mlpackage(submodule_name,
         sources = get_resource_type(mlpackages_dir)
 
     if sources == 'packages':
-        logger.info(f"Loading {submodule_name} mlpackage")
         fname = f"Stable_Diffusion_version_{model_version}_{submodule_name}.mlpackage".replace(
             "/", "_")
         mlpackage_path = os.path.join(mlpackages_dir, fname)
@@ -181,7 +166,6 @@ def _load_mlpackage(submodule_name,
                 f"{submodule_name} CoreML model doesn't exist at {mlpackage_path}")
 
     elif sources == 'compiled':
-        logger.info(f"Loading {submodule_name} mlmodelc")
 
         # FixMe: Submodule names and compiled resources names differ. Can change if names match in the future.
         submodule_names = ["text_encoder", "text_encoder_2", "unet", "vae_decoder", "vae_encoder"]
@@ -209,8 +193,6 @@ def _load_mlpackage_controlnet(mlpackages_dir, model_version, compute_unit):
     """ Load Core ML (mlpackage) models from disk (As exported by torch2coreml.py)
     """
     model_name = model_version.replace("/", "_")
-
-    logger.info(f"Loading controlnet_{model_name} mlpackage")
 
     fname = f"ControlNet_{model_name}.mlpackage"
 

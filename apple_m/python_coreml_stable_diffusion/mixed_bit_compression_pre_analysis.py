@@ -5,11 +5,6 @@ import argparse
 import gc
 import json
 
-import logging
-logging.basicConfig()
-logger = logging.getLogger()
-logger.setLevel('INFO')
-
 import numpy as np
 import os
 from PIL import Image
@@ -198,7 +193,6 @@ def get_palettizable_modules(unet, min_size=PALETTIZE_MIN_SIZE):
         if hasattr(module, 'weight') and getattr(module, 'weight').data.numel() > min_size
     ]
     candidates, sizes = [[a for a,b in ret], [b for a,b in ret]]
-    logger.info(f"{len(candidates)} candidate tensors with {sum(sizes)/1e6} M total params")
     return candidates, sizes
 
 
@@ -209,7 +203,6 @@ def fake_int8_quantize(module):
             i+=1
             submodule.weight.data = torch.from_numpy(
                 fake_linear_quantize(submodule.weight.data.numpy()))
-    logger.info(f"{i} modules fake int8 quantized")
     return module
 
 
@@ -219,7 +212,6 @@ def fake_nbits_palette(module, nbits):
         if hasattr(submodule, 'weight'):
             i+=1
             fake_palettize(submodule, nbits=nbits)
-    logger.info(f"{i} modules fake {nbits}-bits palettized")
     return module
 
 
@@ -239,8 +231,6 @@ def fake_palette_from_recipe(module, recipe):
             else:
                 tot_bits += submodule.weight.numel() * 16
 
-    logger.info(f"Palettized to {tot_bits/tot_numel:.2f}-bits mixed palette ({tot_bits/8e6} MB) ")
-
 # Globally synced RNG state
 rng = torch.Generator()
 rng_state = rng.get_state()
@@ -252,7 +242,6 @@ def run_pipe(pipe):
         device = "cuda"
     else:
         device = "cpu"
-    logger.debug(f"Placing pipe in {device}")
 
     global rng, rng_state
     rng.set_state(rng_state)
@@ -321,7 +310,6 @@ def benchmark_signal_integrity(pipe,
             float(f"{compute_psnr(r,t):.1f}")
             for r,t in zip(ref_out, test_out)
         ]
-        logger.info(f"{nbits}-bit: {candidate} = {results[candidate]}")
 
     return results
             
@@ -441,9 +429,7 @@ def main(args):
     # Preserve a pristine copy for reference outputs
     ref_pipe = deepcopy(pipe)
     if args.default_nbits != 16:
-        logger.info(f"Palettizing unet to default {args.default_nbits}-bit")
         fake_nbits_palette(pipe.unet, args.default_nbits)
-        logger.info("Done.")
 
     # Cache reference outputs
     ref_out = run_pipe(pipe)
@@ -516,7 +502,6 @@ def main(args):
     )
 
     for recipe_no, psnr_threshold in enumerate(recipe_psnr_thresholds):
-        logger.info(f"Building recipe #{recipe_no}")
         recipe, stats = build_recipe(
             results['cumulative'],
             sizes_table,
@@ -524,11 +509,6 @@ def main(args):
             args.default_nbits,
         )
         achieved_psnr = simulate_quant_fn(ref_pipe, lambda x: partial(fake_palette_from_recipe, recipe=recipe)(x))[1]
-        logger.info(
-            f"Recipe #{recipe_no}: {stats['nbits']:.2f}-bits @ per-layer {psnr_threshold} dB, "
-            f"end-to-end {achieved_psnr} dB & "
-            f"{stats['size_mb']:.2f} MB"
-        )
 
         # Save achieved PSNR and compressed size
         recipe_key = f"recipe_{stats['nbits']:.2f}_bit_mixedpalette"

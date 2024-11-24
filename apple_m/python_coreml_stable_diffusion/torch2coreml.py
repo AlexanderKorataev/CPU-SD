@@ -23,12 +23,6 @@ from diffusionkit.tests.torch2coreml import (
 import gc
 from huggingface_hub import snapshot_download
 
-import logging
-
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 import numpy as np
 import os
 import requests
@@ -84,16 +78,11 @@ def report_correctness(original_outputs, final_outputs, log_prefix):
     final_psnr = compute_psnr(original_outputs, final_outputs)
 
     dB_change = final_psnr - original_psnr
-    logger.info(
-        f"{log_prefix}: PSNR changed by {dB_change:.1f} dB ({original_psnr:.1f} -> {final_psnr:.1f})"
-    )
+
 
     if final_psnr < ABSOLUTE_MIN_PSNR:
         raise ValueError(f"{final_psnr:.1f} dB is too low!")
-    else:
-        logger.info(
-            f"{final_psnr:.1f} dB > {ABSOLUTE_MIN_PSNR} dB (minimum allowed) parity check passed"
-        )
+
     return final_psnr
 
 def _get_out_path(args, submodule_name):
@@ -111,8 +100,6 @@ def _convert_to_coreml(submodule_name, torchscript_module, sample_inputs,
     compute_unit = compute_unit or ct.ComputeUnit[args.compute_unit]
 
     if os.path.exists(out_path):
-        logger.info(f"Skipping export because {out_path} already exists")
-        logger.info(f"Loading model from {out_path}")
 
         start = time.time()
         # Note: Note that each model load will trigger a model compilation which takes up to a few minutes.
@@ -120,12 +107,9 @@ def _convert_to_coreml(submodule_name, torchscript_module, sample_inputs,
         # upon first load and mitigates the load time in subsequent runs.
         coreml_model = ct.models.MLModel(
             out_path, compute_units=compute_unit)
-        logger.info(
-            f"Loading {out_path} took {time.time() - start:.1f} seconds")
 
         coreml_model.compute_unit = compute_unit
     else:
-        logger.info(f"Converting {submodule_name} to CoreML..")
         coreml_model = ct.convert(
             torchscript_module,
             convert_to="mlprogram",
@@ -147,7 +131,6 @@ def quantize_weights(args):
     """ Quantize weights to args.quantize_nbits using a palette (look-up table)
     """
     for model_name in ["text_encoder", "text_encoder_2", "unet", "refiner", "control-unet"]:
-        logger.info(f"Quantizing {model_name} to {args.quantize_nbits}-bit precision")
         out_path = _get_out_path(args, model_name)
         _quantize_weights(
             out_path,
@@ -158,7 +141,6 @@ def quantize_weights(args):
     if args.convert_controlnet:
         for controlnet_model_version in args.convert_controlnet:
             controlnet_model_name = controlnet_model_version.replace("/", "_")
-            logger.info(f"Quantizing {controlnet_model_name} to {args.quantize_nbits}-bit precision")
             fname = f"ControlNet_{controlnet_model_name}.mlpackage"
             out_path = os.path.join(args.o, fname)
             _quantize_weights(
@@ -169,7 +151,6 @@ def quantize_weights(args):
 
 def _quantize_weights(out_path, model_name, nbits):
     if os.path.exists(out_path):
-        logger.info(f"Quantizing {model_name}")
         mlmodel = ct.models.MLModel(out_path,
                                     compute_units=ct.ComputeUnit.CPU_ONLY)
 
@@ -186,10 +167,6 @@ def _quantize_weights(out_path, model_name, nbits):
         )
 
         model = ct.optimize.coreml.palettize_weights(mlmodel, config=config).save(out_path)
-        logger.info("Done")
-    else:
-        logger.info(
-            f"Skipped quantizing {model_name} (Not found at {out_path})")
 
 
 def _compile_coreml_model(source_model_path, output_dir, final_name):
@@ -197,11 +174,8 @@ def _compile_coreml_model(source_model_path, output_dir, final_name):
     """
     target_path = os.path.join(output_dir, f"{final_name}.mlmodelc")
     if os.path.exists(target_path):
-        logger.warning(
-            f"Found existing compiled model at {target_path}! Skipping..")
         return target_path
 
-    logger.info(f"Compiling {source_model_path}")
     source_model_name = os.path.basename(
         os.path.splitext(source_model_path)[0])
 
@@ -224,10 +198,7 @@ def _download_t5_model(args, t5_save_path):
         revision="main",
         allow_patterns=[f"{model_subpath}/*"]
     )
-    logger.info(f"Downloaded T5 model to {download_path}")
 
-    # Move the downloaded model to the top level of the Resources directory
-    logger.info(f"Copying T5 model from {download_path} to {t5_save_path}")
     cache_path = os.path.join(download_path, model_subpath)
     shutil.copytree(cache_path, t5_save_path)
 
@@ -240,7 +211,6 @@ def bundle_resources_for_swift_cli(args):
     resources_dir = os.path.join(args.o, "Resources")
     if not os.path.exists(resources_dir):
         os.makedirs(resources_dir, exist_ok=True)
-        logger.info(f"Created {resources_dir} for Swift CLI assets")
 
     # Compile model using coremlcompiler (Significantly reduces the load time for unet)
     for source_name, target_name in [("text_encoder", "TextEncoder"),
@@ -262,11 +232,7 @@ def bundle_resources_for_swift_cli(args):
         if os.path.exists(source_path):
             target_path = _compile_coreml_model(source_path, resources_dir,
                                                 target_name)
-            logger.info(f"Compiled {source_path} to {target_path}")
-        else:
-            logger.warning(
-                f"{source_path} not found, skipping compilation to {target_name}.mlmodelc"
-            )
+
 
     if args.convert_controlnet:
         for controlnet_model_version in args.convert_controlnet:
@@ -279,42 +245,28 @@ def bundle_resources_for_swift_cli(args):
             if os.path.exists(source_path):
                 target_path = _compile_coreml_model(source_path, controlnet_dir,
                                                     target_name)
-                logger.info(f"Compiled {source_path} to {target_path}")
-            else:
-                logger.warning(
-                    f"{source_path} not found, skipping compilation to {target_name}.mlmodelc"
-                )
+
 
     # Fetch and save vocabulary JSON file for text tokenizer
-    logger.info("Downloading and saving tokenizer vocab.json")
     with open(os.path.join(resources_dir, "vocab.json"), "wb") as f:
         f.write(requests.get(args.text_encoder_vocabulary_url).content)
-    logger.info("Done")
 
     # Fetch and save merged pairs JSON file for text tokenizer
-    logger.info("Downloading and saving tokenizer merges.txt")
     with open(os.path.join(resources_dir, "merges.txt"), "wb") as f:
         f.write(requests.get(args.text_encoder_merges_url).content)
-    logger.info("Done")
 
     # Fetch and save pre-converted T5 text encoder model
     t5_model_name = "TextEncoderT5.mlmodelc"
     t5_save_path = os.path.join(resources_dir, t5_model_name)
     if args.include_t5:
         if not os.path.exists(t5_save_path):
-            logger.info("Downloading pre-converted T5 encoder model TextEncoderT5.mlmodelc")
             _download_t5_model(args, t5_save_path)
-            logger.info("Done")
-        else:
-            logger.info(f"Skipping T5 download as {t5_save_path} already exists")
             
         # Fetch and save T5 text tokenizer JSON files
-        logger.info("Downloading and saving T5 tokenizer files tokenizer_config.json and tokenizer.json")
         with open(os.path.join(resources_dir, "tokenizer_config.json"), "wb") as f:
             f.write(requests.get(args.text_encoder_t5_config_url).content)
         with open(os.path.join(resources_dir, "tokenizer.json"), "wb") as f:
             f.write(requests.get(args.text_encoder_t5_data_url).content)
-        logger.info("Done")
 
     return resources_dir
 
@@ -343,9 +295,7 @@ def convert_text_encoder(text_encoder, tokenizer, submodule_name, args):
     text_encoder = text_encoder.to(dtype=torch.float32)
     out_path = _get_out_path(args, submodule_name)
     if os.path.exists(out_path):
-        logger.info(
-            f"`{submodule_name}` already exists at {out_path}, skipping conversion."
-        )
+
         return
 
     # Create sample inputs for tracing, conversion and correctness verification
@@ -364,7 +314,6 @@ def convert_text_encoder(text_encoder, tokenizer, submodule_name, args):
         k: (v.shape, v.dtype)
         for k, v in sample_text_encoder_inputs.items()
     }
-    logger.info(f"Sample inputs spec: {sample_text_encoder_inputs_spec}")
 
     class TextEncoder(nn.Module):
 
@@ -389,12 +338,10 @@ def convert_text_encoder(text_encoder, tokenizer, submodule_name, args):
     hidden_layer = -2 if args.xl_version else None
     reference_text_encoder = TextEncoder(with_hidden_states_for_layer=hidden_layer).eval()
 
-    logger.info(f"JIT tracing {submodule_name}..")
     reference_text_encoder = torch.jit.trace(
         reference_text_encoder,
         (sample_text_encoder_inputs["input_ids"].to(torch.int32), ),
     )
-    logger.info("Done.")
 
     if args.xl_version:
         output_names = ["hidden_embeds", "pooled_outputs"]
@@ -430,8 +377,6 @@ def convert_text_encoder(text_encoder, tokenizer, submodule_name, args):
         "pooled_outputs"] = "The version of the `last_hidden_state` output after pooling"
 
     coreml_text_encoder.save(out_path)
-
-    logger.info(f"Saved text_encoder into {out_path}")
 
     # Parity check PyTorch vs CoreML
     if args.check_output_correctness:
@@ -487,9 +432,6 @@ def modify_coremltools_torch_frontend_badbmm():
             # Apply scaling factor beta to the bias.
             if beta.val.dtype == np.int32:
                 beta = mb.cast(x=beta, dtype="fp32")
-                logger.warning(
-                    f"Casted the `beta`(value={beta.val}) argument of `baddbmm` op "
-                    "from int32 to float32 dtype for conversion!")
             bias = mb.mul(x=beta, y=bias, name=bias.name + "_scaled")
 
             context.add(bias)
@@ -511,9 +453,6 @@ def convert_vae_decoder(pipe, args):
     """
     out_path = _get_out_path(args, "vae_decoder")
     if os.path.exists(out_path):
-        logger.info(
-            f"`vae_decoder` already exists at {out_path}, skipping conversion."
-        )
         return
 
     if not hasattr(pipe, "unet"):
@@ -586,8 +525,6 @@ def convert_vae_decoder(pipe, args):
 
     coreml_vae_decoder.save(out_path)
 
-    logger.info(f"Saved vae_decoder into {out_path}")
-
     # Parity check PyTorch vs CoreML
     if args.check_output_correctness:
         baseline_out = baseline_decoder(
@@ -607,9 +544,6 @@ def convert_vae_decoder_sd3(args):
     """
     out_path = _get_out_path(args, "vae_decoder")
     if os.path.exists(out_path):
-        logger.info(
-            f"`vae_decoder` already exists at {out_path}, skipping conversion."
-        )
         return
     
     # Convert the VAE Decoder model via DiffusionKit
@@ -648,8 +582,6 @@ def convert_vae_decoder_sd3(args):
     # Save the updated model
     coreml_vae_decoder.save(out_path)
 
-    logger.info(f"Saved vae_decoder into {out_path}")
-
     # Delete the original file
     if os.path.exists(converted_vae_path):
         shutil.rmtree(converted_vae_path)
@@ -663,9 +595,6 @@ def convert_vae_encoder(pipe, args):
     """
     out_path = _get_out_path(args, "vae_encoder")
     if os.path.exists(out_path):
-        logger.info(
-            f"`vae_encoder` already exists at {out_path}, skipping conversion."
-        )
         return
 
     if not hasattr(pipe, "unet"):
@@ -740,8 +669,6 @@ def convert_vae_encoder(pipe, args):
 
     coreml_vae_encoder.save(out_path)
 
-    logger.info(f"Saved vae_encoder into {out_path}")
-
     # Parity check PyTorch vs CoreML
     if args.check_output_correctness:
         baseline_out = baseline_encoder(
@@ -774,7 +701,6 @@ def convert_unet(pipe, args, model_name=None):
         for idx in range(2))
 
     if args.chunk_unet and unet_chunks_exist:
-        logger.info("`unet` chunks already exist, skipping conversion.")
         del pipe.unet
         gc.collect()
         return
@@ -920,13 +846,10 @@ def convert_unet(pipe, args, model_name=None):
             k: (v.shape, v.dtype)
             for k, v in sample_unet_inputs.items()
         }
-        logger.info(f"Sample UNet inputs spec: {sample_unet_inputs_spec}")
 
         # JIT trace
-        logger.info("JIT tracing..")
         reference_unet = torch.jit.trace(reference_unet,
                                          list(sample_unet_inputs.values()))
-        logger.info("Done.")
 
         if args.check_output_correctness:
             baseline_out = pipe.unet.to(torch.float32)(**baseline_sample_unet_inputs,
@@ -986,7 +909,6 @@ def convert_unet(pipe, args, model_name=None):
         coreml_unet.user_defined_metadata["com.github.apple.ml-stable-diffusion.version"] = __version__
 
         coreml_unet.save(out_path)
-        logger.info(f"Saved unet into {out_path}")
 
         # Parity check PyTorch vs CoreML
         if args.check_output_correctness:
@@ -1000,11 +922,8 @@ def convert_unet(pipe, args, model_name=None):
     else:
         del pipe.unet
         gc.collect()
-        logger.info(
-            f"`unet` already exists at {out_path}, skipping conversion.")
 
     if args.chunk_unet and not unet_chunks_exist:
-        logger.info(f"Chunking {model_name} in two approximately equal MLModels")
         args.mlpackage_path = out_path
         args.remove_original = False
         args.merge_chunks_in_pipeline_model = False
@@ -1016,9 +935,6 @@ def convert_mmdit(args):
     """
     out_path = _get_out_path(args, "mmdit")
     if os.path.exists(out_path):
-        logger.info(
-            f"`mmdit` already exists at {out_path}, skipping conversion."
-        )
         return
     
     # Convert the MMDiT model via DiffusionKit
@@ -1068,7 +984,6 @@ def convert_mmdit(args):
     # Save the updated model
     coreml_mmdit.save(out_path)
 
-    logger.info(f"Saved vae_decoder into {out_path}")
 
     # Delete the original file
     if os.path.exists(converted_mmdit_path):
@@ -1081,17 +996,11 @@ def convert_safety_checker(pipe, args):
     """ Converts the Safety Checker component of Stable Diffusion
     """
     if pipe.safety_checker is None:
-        logger.warning(
-            f"diffusers pipeline for {args.model_version} does not have a `safety_checker` module! " \
-            "`--convert-safety-checker` will be ignored."
-        )
         return
 
     out_path = _get_out_path(args, "safety_checker")
     if os.path.exists(out_path):
-        logger.info(
-            f"`safety_checker` already exists at {out_path}, skipping conversion."
-        )
+
         return
 
     pipe.safety_checker = pipe.safety_checker.to(torch.float32)
@@ -1129,7 +1038,6 @@ def convert_safety_checker(pipe, args):
         k: (v.shape, v.dtype)
         for k, v in sample_safety_checker_inputs.items()
     }
-    logger.info(f"Sample inputs spec: {sample_safety_checker_inputs_spec}")
 
     # Patch safety_checker's forward pass to be vectorized and avoid conditional blocks
     # (similar to pipe.safety_checker.forward_onnx)
@@ -1211,10 +1119,8 @@ def convert_safety_checker(pipe, args):
             MethodType(forward_extended_return, pipe.safety_checker))
 
     # Trace the safety_checker model
-    logger.info("JIT tracing..")
     traced_safety_checker = torch.jit.trace(
         baseline_safety_checker, list(sample_safety_checker_inputs.values()))
-    logger.info("Done.")
     del baseline_safety_checker
     gc.collect()
 
@@ -1291,10 +1197,6 @@ def convert_controlnet(pipe, args):
     for i, controlnet_model_version in enumerate(args.convert_controlnet):
         base_model = _get_controlnet_base_model(controlnet_model_version)
 
-        if base_model is None and args.model_version != "runwayml/stable-diffusion-v1-5":
-            logger.warning(
-                f"The original ControlNet models were trained using Stable Diffusion v1.5. "
-                f"It is possible that model {args.model_version} is not compatible with controlnet.")
         if base_model is not None and base_model != args.model_version:
             raise RuntimeError(
                 f"ControlNet model {controlnet_model_version} was trained using "
@@ -1307,9 +1209,7 @@ def convert_controlnet(pipe, args):
         out_path = os.path.join(args.o, fname)
 
         if os.path.exists(out_path):
-            logger.info(
-                f"`controlnet_{controlnet_model_name}` already exists at {out_path}, skipping conversion."
-            )
+
             continue
 
         if i == 0:
@@ -1352,8 +1252,6 @@ def convert_controlnet(pipe, args):
                 k: (v.shape, v.dtype)
                 for k, v in sample_controlnet_inputs.items()
             }
-            logger.info(
-                f"Sample ControlNet inputs spec: {sample_controlnet_inputs_spec}")
 
             baseline_sample_controlnet_inputs = deepcopy(sample_controlnet_inputs)
             baseline_sample_controlnet_inputs[
@@ -1373,10 +1271,8 @@ def convert_controlnet(pipe, args):
         output_keys = [f"additional_residual_{i}" for i in range(num_residuals)]
 
         # JIT trace
-        logger.info("JIT tracing..")
         reference_controlnet = torch.jit.trace(reference_controlnet,
                                          list(sample_controlnet_inputs.values()))
-        logger.info("Done.")
 
         if args.check_output_correctness:
             baseline_out = original_controlnet(**baseline_sample_controlnet_inputs,
@@ -1429,7 +1325,6 @@ def convert_controlnet(pipe, args):
                 "The value added to the corresponding resnet output in UNet."
 
         coreml_controlnet.save(out_path)
-        logger.info(f"Saved controlnet into {out_path}")
 
         # Parity check PyTorch vs CoreML
         if args.check_output_correctness:
@@ -1446,7 +1341,6 @@ def convert_controlnet(pipe, args):
 def get_pipeline(args):
     model_version = args.model_version
 
-    logger.info(f"Initializing DiffusionPipeline with {model_version}..")
     if args.custom_vae_version:
         from diffusers import AutoencoderKL
         vae = AutoencoderKL.from_pretrained(args.custom_vae_version, torch_dtype=torch.float16)
@@ -1460,7 +1354,6 @@ def get_pipeline(args):
         # SD3 uses standard SDXL diffusers pipeline besides the vae, denoiser, and T5 text encoder
         sdxl_base_version = "stabilityai/stable-diffusion-xl-base-1.0"
         args.xl_version = True
-        logger.info(f"SD3 version specified, initializing DiffusionPipeline with {sdxl_base_version} for non-SD3 components..")
         pipe = DiffusionPipeline.from_pretrained(sdxl_base_version,
                                             torch_dtype=torch.float16,
                                             variant="fp16",
@@ -1473,7 +1366,6 @@ def get_pipeline(args):
                                             use_safetensors=True,
                                             use_auth_token=True)
 
-    logger.info(f"Done. Pipeline in effect: {pipe.__class__.__name__}")
 
     return pipe
 
@@ -1487,53 +1379,35 @@ def main(args):
     # Register the selected attention implementation globally
     unet.ATTENTION_IMPLEMENTATION_IN_EFFECT = unet.AttentionImplementations[
         args.attention_implementation]
-    logger.info(
-        f"Attention implementation in effect: {unet.ATTENTION_IMPLEMENTATION_IN_EFFECT}"
-    )
 
     # Convert models
     if args.convert_vae_decoder:
-        logger.info("Converting vae_decoder")
         if args.sd3_version:
             convert_vae_decoder_sd3(args)
         else:
             convert_vae_decoder(pipe, args)
-        logger.info("Converted vae_decoder")
 
     if args.convert_vae_encoder:
-        logger.info("Converting vae_encoder")
         convert_vae_encoder(pipe, args)
-        logger.info("Converted vae_encoder")
 
     if args.convert_controlnet:
-        logger.info("Converting controlnet")
         convert_controlnet(pipe, args)
-        logger.info("Converted controlnet")
         
     if args.convert_unet:
-        logger.info("Converting unet")
         convert_unet(pipe, args)
-        logger.info("Converted unet")
 
     if args.convert_text_encoder and hasattr(pipe, "text_encoder") and pipe.text_encoder is not None:
-        logger.info("Converting text_encoder")
         convert_text_encoder(pipe.text_encoder, pipe.tokenizer, "text_encoder", args)
         del pipe.text_encoder
-        logger.info("Converted text_encoder")
 
     if args.convert_text_encoder and hasattr(pipe, "text_encoder_2") and pipe.text_encoder_2 is not None:
-        logger.info("Converting text_encoder_2")
         convert_text_encoder(pipe.text_encoder_2, pipe.tokenizer_2, "text_encoder_2", args)
         del pipe.text_encoder_2
-        logger.info("Converted text_encoder_2")
 
     if args.convert_safety_checker:
-        logger.info("Converting safety_checker")
         convert_safety_checker(pipe, args)
-        logger.info("Converted safety_checker")
 
     if args.convert_unet and args.refiner_version is not None:
-        logger.info(f"Converting refiner")
         del pipe
         gc.collect()
         original_model_version = args.model_version
@@ -1543,22 +1417,15 @@ def main(args):
         convert_unet(pipe, args, model_name="refiner")
         del pipe
         gc.collect()
-        logger.info(f"Converted refiner")
     
     if args.convert_mmdit:
-        logger.info("Converting mmdit")
         convert_mmdit(args)
-        logger.info("Converted mmdit")
 
     if args.quantize_nbits is not None:
-        logger.info(f"Quantizing weights to {args.quantize_nbits}-bit precision")
         quantize_weights(args)
-        logger.info(f"Quantized weights to {args.quantize_nbits}-bit precision")
 
     if args.bundle_resources_for_swift_cli:
-        logger.info("Bundling resources for the Swift CLI")
         bundle_resources_for_swift_cli(args)
-        logger.info("Bundled resources for the Swift CLI")
 
 
 def parser_spec():

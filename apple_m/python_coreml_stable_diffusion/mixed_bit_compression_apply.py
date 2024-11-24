@@ -1,7 +1,6 @@
 import argparse
 import gc
 import json
-import logging
 import os
 
 import coremltools as ct
@@ -14,16 +13,9 @@ from python_coreml_stable_diffusion.mixed_bit_compression_pre_analysis import (
     PALETTIZE_MIN_SIZE as MIN_SIZE
 )
 
-
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-
 def main(args):
     # Load Core ML model
     coreml_model = ct.models.MLModel(args.mlpackage_path, compute_units=ct.ComputeUnit.CPU_ONLY)
-    logger.info(f"Loaded {args.mlpackage_path}")
 
     # Load palettization recipe
     with open(args.pre_analysis_json_path, 'r') as f:

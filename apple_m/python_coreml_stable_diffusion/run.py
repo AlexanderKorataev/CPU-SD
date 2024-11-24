@@ -16,12 +16,6 @@ from diffusers.schedulers.scheduling_utils import SchedulerMixin
 import gc
 import inspect
 
-import logging
-
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 import numpy as np
 import os
 import re
@@ -87,17 +81,6 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
             feature_extractor=feature_extractor,
         )
 
-        if safety_checker is None:
-            # Reproduce original warning:
-            # https://github.com/huggingface/diffusers/blob/v0.9.0/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion.py#L119
-            logger.warning(
-                f"You have disabled the safety checker for {self.__class__} by passing `safety_checker=None`. Ensure"
-                " that you abide to the conditions of the Stable Diffusion license and do not expose unfiltered"
-                " results in services or applications open to the public. Both the diffusers team and Hugging Face"
-                " strongly recommend to keep the safety filter enabled in all public facing circumstances, disabling"
-                " it only for use-cases that involve analyzing network behavior or auditing its results. For more"
-                " information, please have a look at https://github.com/huggingface/diffusers/pull/254 ."
-            )
         self.xl = xl
         self.force_zeros_for_empty_prompt = force_zeros_for_empty_prompt
 
@@ -133,9 +116,6 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
         self.height = latent_h * VAE_DECODER_UPSAMPLE_FACTOR
         self.width = latent_w * VAE_DECODER_UPSAMPLE_FACTOR
 
-        logger.info(
-            f"Stable Diffusion configured to generate {self.height}x{self.width} images"
-        )
 
     def get_text_encoder(self):
         return self.text_encoder
@@ -185,10 +165,7 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
                     text_input_ids, untruncated_ids
             ):
                 removed_text = tokenizer.batch_decode(untruncated_ids[:, tokenizer.model_max_length - 1: -1])
-                logger.warning(
-                    "The following part of your input was truncated because CLIP can only handle sequences up to"
-                    f" {tokenizer.model_max_length} tokens: {removed_text}"
-                )
+
 
             embeddings = text_encoder(input_ids=text_input_ids.astype(np.float32))
 
@@ -324,12 +301,6 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
         return processed_cond_list
 
     def check_inputs(self, prompt, height, width, callback_steps):
-        if height != self.height or width != self.width:
-            logger.warning(
-                "`height` and `width` dimensions (of the output image tensor) are fixed when exporting the Core ML models " \
-                "unless flexible shapes are used during export (https://coremltools.readme.io/docs/flexible-inputs). " \
-                "This pipeline was provided with Core ML models that generate {self.height}x{self.width} images (user requested {height}x{width})"
-            )
 
         if not isinstance(prompt, str) and not isinstance(prompt, list):
             raise ValueError(
@@ -479,20 +450,6 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
             else:
                 timestep = np.array([t,], np.float16)
 
-            # # controlnet
-            # if controlnet_cond:
-            #     control_net_additional_residuals = self.run_controlnet(
-            #         sample=latent_model_input,
-            #         timestep=timestep,
-            #         encoder_hidden_states=text_embeddings,
-            #         controlnet_cond=controlnet_cond,
-            #     )
-            # else:
-            #     control_net_additional_residuals = {}
-
-            # # predict the noise residual
-            # unet_additional_kwargs.update(control_net_additional_residuals)
-
             # get prediction from unet
             if not (unet_batch_one and do_classifier_free_guidance):
                 noise_pred = self.unet(
@@ -617,7 +574,6 @@ def get_coreml_pipe(pytorch_pipe,
     if delete_original_pipe:
         del pytorch_pipe
         gc.collect()
-        logger.info("Removed PyTorch pipe to reduce peak memory consumption")
 
     # Load ControlNet models if specified
     if controlnet_models:
@@ -652,7 +608,6 @@ def get_coreml_pipe(pytorch_pipe,
         coreml_pipe_kwargs["controlnet"] = None
 
     # Load Core ML models
-    logger.info(f"Loading Core ML models in memory from {mlpackages_dir}")
     for model_name in model_packages_to_load:
         if model_name in GLOBAL_MODELS and GLOBAL_MODELS[model_name] is not None:
             coreml_pipe_kwargs[model_name] = GLOBAL_MODELS[model_name]
@@ -665,11 +620,8 @@ def get_coreml_pipe(pytorch_pipe,
                 sources=sources,
             )
             GLOBAL_MODELS[model_name] = coreml_pipe_kwargs[model_name]
-    logger.info("Done.")
 
-    logger.info("Initializing Core ML pipe for image generation")
     coreml_pipe = CoreMLStableDiffusionPipeline(**coreml_pipe_kwargs)
-    logger.info("Done.")
 
     return coreml_pipe
 
@@ -709,18 +661,21 @@ def prepare_controlnet_cond(image_path, height, width):
     return image
 
 
+
+
+
+
+
+
+
 def main(args):
-    logger.info(f"Setting random seed to {args.seed}")
     np.random.seed(args.seed)
 
-    logger.info("Initializing PyTorch pipe for reference configuration")
-
-    SDP = StableDiffusionXLPipeline if 'xl' in args.model_version else StableDiffusionPipeline
+    SDP = StableDiffusionPipeline
 
     pytorch_pipe = SDP.from_pretrained(
         args.model_version,
-        use_auth_token=True,
-    )
+    ) 
 
     # Get Scheduler
     user_specified_scheduler = None
@@ -754,7 +709,6 @@ def main(args):
     else:
         controlnet_cond = None
 
-    logger.info("Beginning image generation.")
     image = coreml_pipe(
         prompt=args.prompt,
         height=coreml_pipe.height,
@@ -766,9 +720,7 @@ def main(args):
         unet_batch_one=args.unet_batch_one,
     )
 
-    print(GLOBAL_MODELS)
-
-
     out_path = get_image_path(args)
-    logger.info(f"Saving generated image to {out_path}")
     image["images"][0].save(out_path)
+
+    return out_path

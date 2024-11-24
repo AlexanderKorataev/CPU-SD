@@ -10,18 +10,13 @@ from PIL import Image
 
 
 def save_image_to_file(image, prompt):
-    """
-    Сохраняет изображение в файл и возвращает путь до файла.
-    """
-    # Генерация имени файла на основе промпта
     base_name = prompt.replace(" ", "_").strip()
-    output_dir = "./generated_images"
-    os.makedirs(output_dir, exist_ok=True)  # Создаем директорию, если её нет
+    output_dir = "./images"
+    os.makedirs(output_dir, exist_ok=True)
 
     file_path = os.path.join(output_dir, f"{base_name}.png")
     counter = 1
 
-    # Уникализация имени файла
     while os.path.exists(file_path):
         file_path = os.path.join(output_dir, f"{base_name}_{counter}.png")
         counter += 1
@@ -30,25 +25,24 @@ def save_image_to_file(image, prompt):
     return file_path
 
 def main():
-    # Создаём парсер аргументов
     parser = argparse.ArgumentParser(description="Генерация изображений с использованием модели Stable Diffusion.")
-    parser.add_argument("model_path", type=str, help="Путь к файлу модели.")  # Позиционный аргумент для модели
+    parser.add_argument("model_path", type=str, help="Путь к файлу модели.")
 
     args = parser.parse_args()
 
     pipe = torch.load(args.model_path, weights_only=False)
+    pipe.set_progress_bar_config(disable=True)
+    
     device = "cpu"
     pipe.to(device)
 
 
-    # Читаем ввод из stdin
     for line in sys.stdin:
         prompt = line.strip()
-        if not prompt:  # Если пустой ввод
+        if not prompt:  
             sys.exit(0)
         
         try:
-            # Измерение производительности
             start_time = time.time()
             memory_before = psutil.virtual_memory().used
 
@@ -58,15 +52,12 @@ def main():
             memory_after = psutil.virtual_memory().used
             generation_time = time.time() - start_time
 
-            # Логируем в stderr
             print(f"Генерация завершена: {generation_time:.2f} секунд, "
                   f"использовано памяти: {((memory_after - memory_before) / 1e6):.2f} MB.",
                   file=sys.stderr)
 
-            # Сохраняем изображение в файл
             file_path = save_image_to_file(image, prompt)
 
-            # Выводим путь до файла в stdout
             print(file_path)
 
             del image

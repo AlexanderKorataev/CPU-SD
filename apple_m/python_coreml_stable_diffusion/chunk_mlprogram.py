@@ -18,12 +18,6 @@ from coremltools.converters.mil.testing_utils import random_gen_input_feature_ty
 
 import gc
 
-import logging
-
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 import numpy as np
 import os
 from python_coreml_stable_diffusion import torch2coreml
@@ -84,15 +78,12 @@ def _load_prog_from_mlmodel(model):
     """
     model_spec = model.get_spec()
     start_ = time.time()
-    logger.info(
-        "Loading MLModel object into a MIL Program object (including the weights).."
-    )
+
     prog = _milproto_to_pymil(
         model_spec=model_spec,
         specification_version=model_spec.specificationVersion,
         file_weights_dir=model.weights_dir,
     )
-    logger.info(f"Program loaded in {time.time() - start_:.1f} seconds")
 
     return prog
 
@@ -241,14 +232,10 @@ def _legacy_model_chunking(args):
     assert ext == ".mlpackage", f"`--mlpackage-path` (args.mlpackage_path) is not an .mlpackage file"
 
     # Load CoreML model
-    logger.info("Loading model from {}".format(args.mlpackage_path))
     start_ = time.time()
     model = ct.models.MLModel(
         args.mlpackage_path,
         compute_units=ct.ComputeUnit.CPU_ONLY,
-    )
-    logger.info(
-        f"Loading {args.mlpackage_path} took {time.time() - start_:.1f} seconds"
     )
 
     # Load the MIL Program from MLModel
@@ -259,14 +246,6 @@ def _legacy_model_chunking(args):
         prog)
     main_block = prog.functions["main"]
     incision_op = main_block.operations[op_idx]
-    logger.info(f"{args.mlpackage_path} will chunked into two pieces.")
-    logger.info(
-        f"The incision op: name={incision_op.name}, type={incision_op.op_type}, index={op_idx}/{len(main_block.operations)}"
-    )
-    logger.info(f"First  chunk size = {first_chunk_weights_size:.2f} MB")
-    logger.info(
-        f"Second chunk size = {total_weights_size - first_chunk_weights_size:.2f} MB"
-    )
 
     # Build first chunk (in-place modifies prog by declaring early exits and removing unused subgraph)
     prog_chunk1 = _make_first_chunk_prog(prog, op_idx)
@@ -281,7 +260,6 @@ def _legacy_model_chunking(args):
         gc.collect()
 
     # Convert the MIL Program objects into MLModels
-    logger.info("Converting the two programs")
     model_chunk1 = ct.convert(
         prog_chunk1,
         convert_to="mlprogram",
@@ -290,7 +268,6 @@ def _legacy_model_chunking(args):
     )
     del prog_chunk1
     gc.collect()
-    logger.info("Conversion of first chunk done.")
 
     model_chunk2 = ct.convert(
         prog_chunk2,
@@ -300,11 +277,9 @@ def _legacy_model_chunking(args):
     )
     del prog_chunk2
     gc.collect()
-    logger.info("Conversion of second chunk done.")
 
     # Verify output correctness
     if args.check_output_correctness:
-        logger.info("Verifying output correctness of chunks")
         _verify_output_correctness_of_chunks(
             full_model=model,
             first_chunk_model=model_chunk1,
@@ -321,7 +296,6 @@ def _legacy_model_chunking(args):
         pipeline_model = ct.models.MLModel(out_path_pipeline, compute_units=ct.ComputeUnit.CPU_ONLY)
 
         if args.check_output_correctness:
-            logger.info("Verifying output correctness of pipeline model")
             _verify_output_correctness_of_chunks(
                 full_model=model,
                 pipeline_model=pipeline_model,
@@ -331,13 +305,8 @@ def _legacy_model_chunking(args):
         out_path_chunk1 = os.path.join(args.o, name + "_chunk1.mlpackage")
         out_path_chunk2 = os.path.join(args.o, name + "_chunk2.mlpackage")
 
-        logger.info(
-            f"Saved chunks in {args.o} with the suffix _chunk1.mlpackage and _chunk2.mlpackage"
-        )
         model_chunk1.save(out_path_chunk1)
         model_chunk2.save(out_path_chunk2)
-        logger.info("Done.")
-
 
 def main(args):
     ct_version = ct.__version__
@@ -346,31 +315,22 @@ def main(args):
         # With coremltools version <= 8.0b1,
         # we use the legacy implementation.
         # TODO: Remove the logic after setting the coremltools dependency >= 8.0.
-        logger.info(
-            f"coremltools version {ct_version} detected. Recommended upgrading the package version to "
-            f"'8.0b2' when you running chunk_mlprogram.py script for the latest supports and bug fixes."
-        )
+
         _legacy_model_chunking(args)
     else:
         # Starting from coremltools==8.0b2, there is this `bisect_model` API that
         # we can directly call into.
         from coremltools.models.utils import bisect_model
-        logger.info(f"Start chunking model {args.mlpackage_path} into two pieces.")
         ct.models.utils.bisect_model(
             model=args.mlpackage_path,
             output_dir=args.o,
             merge_chunks_to_pipeline=args.merge_chunks_in_pipeline_model,
             check_output_correctness=args.check_output_correctness,
         )
-        logger.info(f"Model chunking is done.")
 
     # Remove original (non-chunked) model if requested
     if args.remove_original:
-        logger.info(
-            "Removing original (non-chunked) model at {args.mlpackage_path}")
         shutil.rmtree(args.mlpackage_path)
-        logger.info("Done.")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

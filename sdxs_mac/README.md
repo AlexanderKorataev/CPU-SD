@@ -62,7 +62,7 @@ python main.py
 2. **Выполните команду для компиляции**:
 
     ```bash
-    pyinstaller --hidden-import=torch --hidden-import=diffusers --hidden-import=transformers --hidden-import=huggingface_hub --hidden-import=tokenizers --hidden-import=networkx --hidden-import=safetensors --hidden-import=regex --hidden-import=numpy --hidden-import=numpy.core.multiarray --hidden-import=numpy.core._dtype --hidden-import=requests --onefile
+    pyinstaller --hidden-import=torch --hidden-import=diffusers --hidden-import=transformers --hidden-import=huggingface_hub --hidden-import=tokenizers --hidden-import=networkx --hidden-import=safetensors --hidden-import=regex --hidden-import=numpy --hidden-import=numpy.core.multiarray --hidden-import=numpy.core._dtype --hidden-import=requests --onefile main.py
     ```
 
     --onefile для того, чтобы сборка была в один файл

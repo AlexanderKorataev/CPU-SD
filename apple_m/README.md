@@ -18,16 +18,29 @@
     ```
 
     ```bash
-    pip install diffusers transformers Pillow numpy
+    pip install -r requirements.txt
     ```
 
-3. **Подготовка модели**:
-    Поместите файл модели `model.pth` в ту же папку, где находится `main.py`.
-
-4. **Cоздайте папку images**:
+4. **Cоздайте папку images**
 
 ## Запуск скрипта
 
 ```bash
-python main.py
+python main_coreml.py -i путь к директроии с .mlpackage
 ```
+
+### Компиляция
+
+1. **Убедитесь, что `pyinstaller` установлен**:
+    ```bash
+    pip install pyinstaller
+    ```
+
+2. **Выполните команду для компиляции**:
+
+    ```bash
+    pyinstaller --onefile main_coreml.py
+    ```
+
+    --onefile для того, чтобы сборка была в один файл
+    --hidden-import - зависимости

@@ -11,11 +11,6 @@ from diffusers import ModelMixin
 
 from enum import Enum
 
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 import math
 
 import torch
@@ -24,10 +19,7 @@ import torch.nn.functional as F
 
 # Ensure minimum macOS version requirement is met for this particular model
 from coremltools.models.utils import _macos_version
-if not _macos_version() >= (13, 1):
-    logger.warning(
-        "!!! macOS 13.1 and newer or iOS/iPadOS 16.2 and newer is required for best performance !!!"
-    )
+
 
 
 class AttentionImplementations(Enum):
@@ -829,8 +821,6 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin):
             raise NotImplementedError
         if only_cross_attention:
             raise NotImplementedError
-        if kwargs.get("use_linear_projection", None):
-            logger.warning("`use_linear_projection=True` is ignored!")
 
         super().__init__()
         self._register_load_state_dict_pre_hook(linear_to_conv2d_map)

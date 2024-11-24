@@ -15,7 +15,7 @@ def save_image_to_file(image, prompt):
     """
     # Генерация имени файла на основе промпта
     base_name = prompt.replace(" ", "_").strip()
-    output_dir = "./generated_images"
+    output_dir = "./images"
     os.makedirs(output_dir, exist_ok=True)  # Создаем директорию, если её нет
 
     file_path = os.path.join(output_dir, f"{base_name}.png")
@@ -37,6 +37,8 @@ def main():
     args = parser.parse_args()
 
     pipe = torch.load(args.model_path, weights_only=False)
+    pipe.set_progress_bar_config(disable=True)
+    
     device = "mps"
     pipe.to(device)
 

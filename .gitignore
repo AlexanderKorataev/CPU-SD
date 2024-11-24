@@ -167,6 +167,7 @@ model_f16.pth
 benchmark_results.xlsx
 linux_benchmark_results.xlsx
 mac_benchmark_results.xlsx
+win_benchmark_results.xlsx
 venv-lite
 venv-lite2
 images
