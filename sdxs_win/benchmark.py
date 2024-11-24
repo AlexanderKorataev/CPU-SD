@@ -48,7 +48,7 @@ def get_total_memory_usage():
 
 
 
-def benchmark(pipe, prompts, device="mps"):
+def benchmark(pipe, prompts):
     """
     Выполняет бенчмарк на наборе промптов и возвращает результаты в виде таблицы.
     """
@@ -136,7 +136,7 @@ def main():
     pipe = load_model(args.model_path, device=args.device)
 
     # Запуск бенчмарка
-    results = benchmark(pipe, prompts, device=args.device)
+    results = benchmark(pipe, prompts)
 
     # Сохранение результатов в файл
     results.to_excel(args.output, index=False)

@@ -49,7 +49,8 @@ def get_total_memory_usage():
 
 
 
-def benchmark(pipe, prompts):
+
+def benchmark(pipe, prompts, device="cpu"):
     """
     Выполняет бенчмарк на наборе промптов и возвращает результаты в виде таблицы.
     """
@@ -100,6 +101,7 @@ def benchmark(pipe, prompts):
     return pd.DataFrame(results)
 
 
+
 def main():
     # Парсер аргументов
     parser = argparse.ArgumentParser(description="Бенчмарк модели Stable Diffusion.")
@@ -137,7 +139,7 @@ def main():
     pipe = load_model(args.model_path, device=args.device)
 
     # Запуск бенчмарка
-    results = benchmark(pipe, prompts, device=args.device)
+    results = benchmark(pipe, prompts)
 
     # Сохранение результатов в файл
     results.to_excel(args.output, index=False)
