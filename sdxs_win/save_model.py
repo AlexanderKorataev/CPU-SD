@@ -1,7 +1,7 @@
 from diffusers import StableDiffusionPipeline
 import torch
 
-weight_type = torch.float32 # Или float16, но модель будет менее точной!
+weight_type = torch.float32 
 
 
 pipeline = StableDiffusionPipeline.from_pretrained('IDKiro/sdxs-512-0.9', torch_dtype=weight_type)

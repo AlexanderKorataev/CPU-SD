@@ -163,6 +163,8 @@ cython_debug/
 
 coreml-stable-diffusion-2-1-base-palettized_split_einsum_v2_compiled
 model.pth
+model_f16.pth
+benchmark_results.xlsx
 venv-lite
 venv-lite2
 images
