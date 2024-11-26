@@ -126,9 +126,9 @@ if __name__ == "__main__":
 
             args.prompt = prompt
 
-            suppress_stdout_stderr()
+            # suppress_stdout_stderr()
             out_path = main(args)
-            restore_stdout_stderr()
+            # restore_stdout_stderr()
 
             print(out_path)
 
