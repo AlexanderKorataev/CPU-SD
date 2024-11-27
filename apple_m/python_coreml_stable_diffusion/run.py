@@ -19,6 +19,7 @@ import inspect
 import numpy as np
 import os
 import re
+import sys
 
 from python_coreml_stable_diffusion.coreml_model import (
     CoreMLModel,
@@ -41,6 +42,17 @@ GLOBAL_MODELS = {
     "unet": None,
     "vae_decoder": None,
 }
+
+
+def suppress_stdout_stderr():
+    sys.stdout = open(os.devnull, "w")
+    sys.stderr = open(os.devnull, "w")
+
+
+def restore_stdout_stderr():
+    sys.stdout = sys.__stdout__
+    sys.stderr = sys.__stderr__
+
 
 
 class CoreMLStableDiffusionPipeline(DiffusionPipeline):
@@ -720,7 +732,7 @@ def main(args):
         unet_batch_one=args.unet_batch_one,
     )
 
-    out_path = get_image_path(args)
-    image["images"][0].save(out_path)
+    # out_path = get_image_path(args)
+    # image["images"][0].save(out_path)
 
-    return out_path
+    return image["images"][0]

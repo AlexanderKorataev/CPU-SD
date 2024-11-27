@@ -4,6 +4,8 @@ import argparse
 import signal
 import warnings
 import logging
+from io import BytesIO
+import struct
 
 
 def suppress_stderr():
@@ -43,6 +45,28 @@ def restore_stdout_stderr():
 
 def handle_exit(signum, frame):
     sys.exit(0)
+
+
+def output_image_to_stdout(image):
+    restore_stdout_stderr()
+
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    image_data = buffer.getvalue()
+    buffer.close()
+
+    image_size = len(image_data)
+
+    size_bytes = struct.pack("<I", image_size)
+
+    sys.stderr.write(f"{image_size} \n")
+    sys.stdout.buffer.write(size_bytes)
+    sys.stdout.buffer.flush()
+
+    sys.stdout.buffer.write(image_data)
+    sys.stdout.buffer.flush()
+
+    suppress_stdout_stderr()
 
 
 if __name__ == "__main__":
@@ -126,11 +150,11 @@ if __name__ == "__main__":
 
             args.prompt = prompt
 
-            # suppress_stdout_stderr()
-            out_path = main(args)
-            # restore_stdout_stderr()
+            suppress_stdout_stderr()
+            image = main(args)
+            restore_stdout_stderr()
 
-            print(out_path)
+            output_image_to_stdout(image)
 
         except EOFError:
             handle_exit(None, None)
