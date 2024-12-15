@@ -1,16 +1,13 @@
 import sys
 import os
 
-
 def suppress_stdout_stderr():
     sys.stdout = open(os.devnull, "w")
     sys.stderr = open(os.devnull, "w")
 
-
 def restore_stdout_stderr():
     sys.stdout = sys.__stdout__
     sys.stderr = sys.__stderr__
-
 
 suppress_stdout_stderr()
 import torch
@@ -101,16 +98,14 @@ def main():
         parser.add_argument("--save_images", action="store_true", help="Сохранять изображения для проверки.")
         args = parser.parse_args()
 
-        config = SeamlessConfig(x_mode=args.x_mode, y_mode=args.y_mode)
-
+        # Загружаем пайплайн
         pipe = torch.load(args.model_path, weights_only=False)
         pipe.set_progress_bar_config(disable=True)
-        pipe = seamless_tiling(pipeline=pipe, config=config)
         pipe.to("cpu")
+
         restore_stdout_stderr()
 
-        if args.save_report:
-            config.save_report()
+        config = SeamlessConfig(x_mode=args.x_mode, y_mode=args.y_mode)
 
         while True:
             try:
@@ -119,9 +114,18 @@ def main():
                 if not prompt:
                     sys.exit(0)
 
+                if prompt.startswith('@'):
+                    modified_pipe = seamless_tiling(pipeline=pipe, config=config)
+                    if args.save_report:
+                        config.save_report()
+                    prompt = prompt[1:].strip()
+                    current_pipe = modified_pipe
+                else:
+                    current_pipe = pipe
+
                 try:
                     with torch.no_grad():
-                        image = pipe(
+                        image = current_pipe(
                             prompt,
                             height=512,
                             width=512,
