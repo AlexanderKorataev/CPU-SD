@@ -36,14 +36,6 @@ from PIL import Image
 from typing import Optional
 from diffusers.models.lora import LoRACompatibleConv
 
-GLOBAL_MODELS = {
-    "text_encoder": None,
-    "text_encoder_2": None,
-    "tokenizer_2": None,
-    "unet": None,
-    "vae_decoder": None,
-}
-
 
 class SeamlessConfig:
     def __init__(self, x_mode='circular', y_mode='circular'):
@@ -60,30 +52,100 @@ class SeamlessConfig:
         with open(filename, "w") as f:
             f.write("\n".join(self.report))
 
-def seamless_tiling(pipeline, config: SeamlessConfig):
+
+
+
+# def seamless_tiling(pipeline, config: SeamlessConfig):
+#     def asymmetric_conv2d_convforward(self, input: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None):
+#         self.paddingX = (self._reversed_padding_repeated_twice[0], self._reversed_padding_repeated_twice[1], 0, 0)
+#         self.paddingY = (0, 0, self._reversed_padding_repeated_twice[2], self._reversed_padding_repeated_twice[3])
+#         working = torch.nn.functional.pad(input, self.paddingX, mode=config.x_mode)
+#         working = torch.nn.functional.pad(working, self.paddingY, mode=config.y_mode)
+#         return torch.nn.functional.conv2d(working, weight, bias, self.stride, torch.nn.modules.utils._pair(0), self.dilation, self.groups)
+
+#     targets = [pipeline.vae, pipeline.text_encoder, pipeline.unet]
+#     convolution_layers = []
+
+#     for target in targets:
+#         for module in target.modules():
+#             if isinstance(module, torch.nn.Conv2d):
+#                 convolution_layers.append(module)
+
+#     for layer in convolution_layers:
+#         if isinstance(layer, LoRACompatibleConv) and layer.lora_layer is None:
+#             layer.lora_layer = lambda * x: 0
+
+#         layer._conv_forward = asymmetric_conv2d_convforward.__get__(layer, torch.nn.Conv2d)
+#         config.add_report(layer, config.x_mode, config.y_mode)
+
+#     return pipeline
+def seamless_tiling(pipeline, x_axis: bool, y_axis: bool):
+    """
+    Apply seamless tiling logic (circular padding) to the specified pipeline.
+    """
     def asymmetric_conv2d_convforward(self, input: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None):
+        # Determine padding modes based on x_axis and y_axis
+        x_mode = 'circular' if x_axis else 'constant'
+        y_mode = 'circular' if y_axis else 'constant'
+
+        # Define padding
         self.paddingX = (self._reversed_padding_repeated_twice[0], self._reversed_padding_repeated_twice[1], 0, 0)
         self.paddingY = (0, 0, self._reversed_padding_repeated_twice[2], self._reversed_padding_repeated_twice[3])
-        working = torch.nn.functional.pad(input, self.paddingX, mode=config.x_mode)
-        working = torch.nn.functional.pad(working, self.paddingY, mode=config.y_mode)
+
+        # Apply padding
+        working = torch.nn.functional.pad(input, self.paddingX, mode=x_mode)
+        working = torch.nn.functional.pad(working, self.paddingY, mode=y_mode)
+
+        # Perform convolution
         return torch.nn.functional.conv2d(working, weight, bias, self.stride, torch.nn.modules.utils._pair(0), self.dilation, self.groups)
 
-    targets = [pipeline.vae, pipeline.text_encoder, pipeline.unet]
+    # Specify the targets (modules) in the pipeline
+    targets = [pipeline.vae_decoder, pipeline.text_encoder, pipeline.unet]  # Use `vae_decoder` instead of `vae`
     convolution_layers = []
 
+    # Identify convolutional layers
     for target in targets:
         for module in target.modules():
             if isinstance(module, torch.nn.Conv2d):
                 convolution_layers.append(module)
 
+    # Modify convolutional layers for seamless tiling
     for layer in convolution_layers:
         if isinstance(layer, LoRACompatibleConv) and layer.lora_layer is None:
-            layer.lora_layer = lambda * x: 0
-
+            layer.lora_layer = lambda *x: 0  # Add dummy layer
         layer._conv_forward = asymmetric_conv2d_convforward.__get__(layer, torch.nn.Conv2d)
-        config.add_report(layer, config.x_mode, config.y_mode)
 
     return pipeline
+
+
+
+
+def apply_circular_padding(tensor, padding_x, padding_y):
+    """
+    Apply circular padding to a 4D tensor (N, C, H, W).
+    Args:
+        tensor (numpy.ndarray): Input tensor of shape (N, C, H, W).
+        padding_x (int): Amount of padding in the width (W) dimension.
+        padding_y (int): Amount of padding in the height (H) dimension.
+    Returns:
+        numpy.ndarray: Tensor with circular padding applied.
+    """
+    if padding_x > 0:
+        tensor = np.concatenate([tensor[:, :, :, -padding_x:], tensor, tensor[:, :, :, :padding_x]], axis=3)
+    if padding_y > 0:
+        tensor = np.concatenate([tensor[:, :, -padding_y:, :], tensor, tensor[:, :, :padding_y, :]], axis=2)
+    return tensor
+
+
+
+
+GLOBAL_MODELS = {
+    "text_encoder": None,
+    "text_encoder_2": None,
+    "tokenizer_2": None,
+    "unet": None,
+    "vae_decoder": None,
+}
 
 
 
@@ -140,6 +202,10 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
         self.controlnet = controlnet
 
         self.vae_decoder = vae_decoder
+
+
+            # Seamless tiling configuration
+        self.seamless_config = None  # Placeholder for seamless configuration
 
 
         global GLOBAL_MODELS
@@ -307,28 +373,38 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
 
         return image
 
-    def prepare_latents(self,
-                        batch_size,
-                        num_channels_latents,
-                        height,
-                        width,
-                        latents=None):
-        latents_shape = (batch_size, num_channels_latents, self.height // 8,
-                         self.width // 8)
+    # def prepare_latents(self,
+    #                     batch_size,
+    #                     num_channels_latents,
+    #                     height,
+    #                     width,
+    #                     latents=None):
+    #     latents_shape = (batch_size, num_channels_latents, self.height // 8,
+    #                      self.width // 8)
+    #     if latents is None:
+    #         latents = np.random.randn(*latents_shape).astype(np.float16)
+    #     elif latents.shape != latents_shape:
+    #         raise ValueError(
+    #             f"Unexpected latents shape, got {latents.shape}, expected {latents_shape}"
+    #         )
+
+    #     init_noise = self.scheduler.init_noise_sigma
+
+    #     if isinstance(init_noise, torch.Tensor):
+    #         init_noise = init_noise.numpy()
+
+    #     latents = latents * init_noise
+
+    #     return latents
+
+    def prepare_latents(self, batch_size, num_channels_latents, height, width, latents=None):
+        latents_shape = (batch_size, num_channels_latents, height // 8, width // 8)
         if latents is None:
             latents = np.random.randn(*latents_shape).astype(np.float16)
         elif latents.shape != latents_shape:
             raise ValueError(
                 f"Unexpected latents shape, got {latents.shape}, expected {latents_shape}"
             )
-
-        init_noise = self.scheduler.init_noise_sigma
-
-        if isinstance(init_noise, torch.Tensor):
-            init_noise = init_noise.numpy()
-
-        latents = latents * init_noise
-
         return latents
 
     def prepare_control_cond(self,
@@ -559,6 +635,9 @@ class CoreMLStableDiffusionPipeline(DiffusionPipeline):
             images=image, nsfw_content_detected=has_nsfw_concept)
 
 
+
+
+
 def get_available_schedulers():
     schedulers = {}
     for scheduler in [DDIMScheduler,
@@ -574,7 +653,6 @@ def get_available_schedulers():
 SCHEDULER_MAP = get_available_schedulers()
 
 
-
 def get_coreml_pipe(pytorch_pipe,
                     mlpackages_dir,
                     model_version,
@@ -586,14 +664,11 @@ def get_coreml_pipe(pytorch_pipe,
                     sources=None):
     """
     Initializes and returns a `CoreMLStableDiffusionPipeline` from an original
-    diffusers PyTorch pipeline
-        sources: 'packages' or 'compiled' forces creation of model from specified sources. sources must be in mlpackages_dir
+    diffusers PyTorch pipeline. Supports seamless tiling via `seamless_tiling`.
     """
+    global GLOBAL_MODELS  # Use a global dictionary to manage models.
 
-    global GLOBAL_MODELS  # Используем глобальный словарь
-
-
-    # Gather configured tokenizer and scheduler attributes from the original pipe
+    # Configure the pipeline attributes based on the model version
     if 'xl' in model_version:
         coreml_pipe_kwargs = {
             "tokenizer": pytorch_pipe.tokenizer,
@@ -602,7 +677,6 @@ def get_coreml_pipe(pytorch_pipe,
             'xl': True,
         }
         model_packages_to_load = ["text_encoder", "text_encoder_2", "unet", "vae_decoder"]
-
     else:
         coreml_pipe_kwargs = {
             "tokenizer": pytorch_pipe.tokenizer,
@@ -614,16 +688,16 @@ def get_coreml_pipe(pytorch_pipe,
     coreml_pipe_kwargs["force_zeros_for_empty_prompt"] = force_zeros_for_empty_prompt
     coreml_pipe_kwargs["safety_checker"] = None
 
-    # Optionally delete the original PyTorch pipe to free up memory
+    # Free up memory by deleting the original PyTorch pipe
     if delete_original_pipe:
         del pytorch_pipe
         gc.collect()
 
-    # Load ControlNet models if specified
+    # Handle ControlNet models, if specified
     if controlnet_models:
         model_packages_to_load.remove("unet")
-        
-        # Проверка в GLOBAL_MODELS для ControlNet unet
+
+        # Check for existing ControlNet unet in GLOBAL_MODELS
         if "control-unet" in GLOBAL_MODELS:
             coreml_pipe_kwargs["unet"] = GLOBAL_MODELS["control-unet"]
         else:
@@ -634,7 +708,7 @@ def get_coreml_pipe(pytorch_pipe,
                 compute_unit=compute_unit,
             )
             GLOBAL_MODELS["control-unet"] = coreml_pipe_kwargs["unet"]
-        
+
         coreml_pipe_kwargs["controlnet"] = []
         for cn_model_version in controlnet_models:
             controlnet_key = f"controlnet_{cn_model_version}"
@@ -651,7 +725,7 @@ def get_coreml_pipe(pytorch_pipe,
     else:
         coreml_pipe_kwargs["controlnet"] = None
 
-    # Load Core ML models
+    # Load CoreML models for the pipeline
     for model_name in model_packages_to_load:
         if model_name in GLOBAL_MODELS and GLOBAL_MODELS[model_name] is not None:
             coreml_pipe_kwargs[model_name] = GLOBAL_MODELS[model_name]
@@ -665,8 +739,12 @@ def get_coreml_pipe(pytorch_pipe,
             )
             GLOBAL_MODELS[model_name] = coreml_pipe_kwargs[model_name]
 
-
+    # Instantiate the CoreMLStableDiffusionPipeline
     coreml_pipe = CoreMLStableDiffusionPipeline(**coreml_pipe_kwargs)
+
+    # # Apply seamless tiling if enabled
+    # config = SeamlessConfig(x_mode='circular', y_mode='circular')
+    # coreml_pipe = seamless_tiling(coreml_pipe, config)
 
     return coreml_pipe
 
@@ -713,6 +791,74 @@ def prepare_controlnet_cond(image_path, height, width):
 
 
 
+# def main(args):
+#     np.random.seed(args.seed)
+
+#     SDP = StableDiffusionPipeline
+
+#     pytorch_pipe = SDP.from_pretrained(
+#         args.model_version,
+#     )
+
+#     # Get Scheduler
+#     user_specified_scheduler = None
+#     if args.scheduler is not None:
+#         user_specified_scheduler = SCHEDULER_MAP[
+#             args.scheduler].from_config(pytorch_pipe.scheduler.config)
+
+#     # Get Force Zeros Config if it exists
+#     force_zeros_for_empty_prompt: bool = False
+#     if 'xl' in args.model_version and 'force_zeros_for_empty_prompt' in pytorch_pipe.config:
+#         force_zeros_for_empty_prompt = pytorch_pipe.config['force_zeros_for_empty_prompt']
+
+
+#     coreml_pipe = get_coreml_pipe(
+#         pytorch_pipe=pytorch_pipe,
+#         mlpackages_dir=args.i,
+#         model_version=args.model_version,
+#         compute_unit=args.compute_unit,
+#         scheduler_override=user_specified_scheduler,
+#         controlnet_models=args.controlnet,
+#         force_zeros_for_empty_prompt=force_zeros_for_empty_prompt,
+#         sources=args.model_sources,
+#     )
+
+
+#     if args.controlnet:
+#         controlnet_cond = []
+#         for i, _ in enumerate(args.controlnet):
+#             image_path = args.controlnet_inputs[i]
+#             image = prepare_controlnet_cond(image_path, coreml_pipe.height, coreml_pipe.width)
+#             controlnet_cond.append(image)
+#     else:
+#         controlnet_cond = None
+
+#     image = coreml_pipe(
+#         prompt=args.prompt,
+#         height=coreml_pipe.height,
+#         width=coreml_pipe.width,
+#         num_inference_steps=args.num_inference_steps,
+#         guidance_scale=args.guidance_scale,
+#         controlnet_cond=controlnet_cond,
+#         negative_prompt=args.negative_prompt,
+#         unet_batch_one=args.unet_batch_one,
+#     )
+
+#     # out_path = get_image_path(args)
+#     # image["images"][0].save(out_path)
+
+#     return image["images"][0]
+
+
+
+
+
+
+
+
+
+
+
 def main(args):
     np.random.seed(args.seed)
 
@@ -720,7 +866,23 @@ def main(args):
 
     pytorch_pipe = SDP.from_pretrained(
         args.model_version,
+        
     )
+    # pytorch_pipe.load_lora_weights("./StylizedTexture_v2.safetensors")
+
+    # Применение весов LoRA к модели
+    # pytorch_pipe.fuse_lora()
+
+
+    # Если промпт начинается с @, применяем тайлинговую модификацию
+    is_tiling = False
+    if args.prompt.startswith('@'):
+        is_tiling = True
+        # Убираем @ из промпта
+        args.prompt = args.prompt[1:].strip()
+        # Применяем тайлинговую модификацию пайплайна
+        # config = SeamlessConfig()
+        # pytorch_pipe = seamless_tiling(pytorch_pipe, config)
 
     # Get Scheduler
     user_specified_scheduler = None
@@ -733,7 +895,6 @@ def main(args):
     if 'xl' in args.model_version and 'force_zeros_for_empty_prompt' in pytorch_pipe.config:
         force_zeros_for_empty_prompt = pytorch_pipe.config['force_zeros_for_empty_prompt']
 
-
     coreml_pipe = get_coreml_pipe(
         pytorch_pipe=pytorch_pipe,
         mlpackages_dir=args.i,
@@ -744,6 +905,9 @@ def main(args):
         force_zeros_for_empty_prompt=force_zeros_for_empty_prompt,
         sources=args.model_sources,
     )
+
+    # coreml_pipe = seamless_tiling(coreml_pipe, config)
+    coreml_pipe = seamless_tiling(coreml_pipe, x_axis=True, y_axis=True)
 
 
     if args.controlnet:
@@ -766,7 +930,14 @@ def main(args):
         unet_batch_one=args.unet_batch_one,
     )
 
-    # out_path = get_image_path(args)
-    # image["images"][0].save(out_path)
+    seamless_tiling(coreml_pipe, x_axis=False, y_axis=False)
 
     return image["images"][0]
+
+    
+
+
+
+
+
+

@@ -3,7 +3,7 @@
 # Copyright (C) 2022 Apple Inc. All Rights Reserved.
 #
 
-from python_coreml_stable_diffusion import (
+from apple_m.python_coreml_stable_diffusion import (
     unet, controlnet, chunk_mlprogram
 )
 
@@ -38,6 +38,57 @@ import torch.nn.functional as F
 torch.set_grad_enabled(False)
 
 from types import MethodType
+
+
+import time
+import torch  # Only used for `torch.from_tensor` in `pipe.scheduler.step()`
+from transformers import CLIPFeatureExtractor, CLIPTokenizer
+from typing import List, Optional, Union, Tuple
+from PIL import Image
+from typing import Optional
+from diffusers.models.lora import LoRACompatibleConv
+
+
+class SeamlessConfig:
+    def __init__(self, x_mode='circular', y_mode='circular'):
+        self.x_mode = x_mode
+        self.y_mode = y_mode
+        self.padding_x = (0, 0)
+        self.padding_y = (0, 0)
+        self.report = []
+
+    def add_report(self, layer, x_mode, y_mode):
+        self.report.append(f"Modified layer: {layer}, x_mode={x_mode}, y_mode={y_mode}")
+
+    def save_report(self, filename="modification_report.txt"):
+        with open(filename, "w") as f:
+            f.write("\n".join(self.report))
+
+
+def seamless_tiling(pipeline, config: SeamlessConfig):
+    def asymmetric_conv2d_convforward(self, input: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None):
+        self.paddingX = (self._reversed_padding_repeated_twice[0], self._reversed_padding_repeated_twice[1], 0, 0)
+        self.paddingY = (0, 0, self._reversed_padding_repeated_twice[2], self._reversed_padding_repeated_twice[3])
+        working = torch.nn.functional.pad(input, self.paddingX, mode=config.x_mode)
+        working = torch.nn.functional.pad(working, self.paddingY, mode=config.y_mode)
+        return torch.nn.functional.conv2d(working, weight, bias, self.stride, torch.nn.modules.utils._pair(0), self.dilation, self.groups)
+
+    targets = [pipeline.vae, pipeline.text_encoder, pipeline.unet]
+    convolution_layers = []
+
+    for target in targets:
+        for module in target.modules():
+            if isinstance(module, torch.nn.Conv2d):
+                convolution_layers.append(module)
+
+    for layer in convolution_layers:
+        if isinstance(layer, LoRACompatibleConv) and layer.lora_layer is None:
+            layer.lora_layer = lambda * x: 0
+
+        layer._conv_forward = asymmetric_conv2d_convforward.__get__(layer, torch.nn.Conv2d)
+        config.add_report(layer, config.x_mode, config.y_mode)
+
+    return pipeline
 
 
 def _get_coreml_inputs(sample_inputs, args):
@@ -1366,8 +1417,10 @@ def get_pipeline(args):
                                             use_safetensors=True,
                                             use_auth_token=True)
 
+    config = SeamlessConfig(x_mode=args.x_mode, y_mode=args.y_mode)
+    modified_pipe = seamless_tiling(pipeline=pipe, config=config)
 
-    return pipe
+    return modified_pipe
 
 
 def main(args):

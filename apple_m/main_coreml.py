@@ -14,12 +14,12 @@ def suppress_stderr():
 def restore_stderr():
     sys.stderr = sys.__stderr__
 
-suppress_stderr()
+# suppress_stderr()
 from python_coreml_stable_diffusion.run import main
 from python_coreml_stable_diffusion.coreml_model import (
     get_available_compute_units,
 )
-restore_stderr()
+# restore_stderr()
 
 
 def setup_logging():
@@ -48,7 +48,7 @@ def handle_exit(signum, frame):
 
 
 def output_image_to_stdout(image):
-    restore_stdout_stderr()
+    # restore_stdout_stderr()
 
     buffer = BytesIO()
     image.save(buffer, format="PNG")
@@ -66,7 +66,9 @@ def output_image_to_stdout(image):
     sys.stdout.buffer.write(image_data)
     sys.stdout.buffer.flush()
 
-    suppress_stdout_stderr()
+    print(output_image_to_stdout)
+
+    # suppress_stdout_stderr()
 
 
 if __name__ == "__main__":
@@ -150,13 +152,13 @@ if __name__ == "__main__":
 
             args.prompt = prompt
 
-            suppress_stdout_stderr()
+            # suppress_stdout_stderr()
             image = main(args)
-            restore_stdout_stderr()
+            # restore_stdout_stderr()
 
             output_image_to_stdout(image)
 
         except EOFError:
             handle_exit(None, None)
-        except Exception as e:
-            restore_stdout_stderr()
+        # except Exception as e:
+            # restore_stdout_stderr()
